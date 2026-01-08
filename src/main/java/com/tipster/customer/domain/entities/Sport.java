@@ -11,18 +11,18 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "leagues", indexes = {
-    @Index(name = "idx_leagues_name", columnList = "name"),
-    @Index(name = "idx_leagues_country", columnList = "country"),
-    @Index(name = "idx_leagues_is_active", columnList = "is_active")
+@Table(name = "sports", indexes = {
+    @Index(name = "idx_sports_group", columnList = "sport_group"),
+    @Index(name = "idx_sports_key", columnList = "sport_key"),
+    @Index(name = "idx_sports_is_active", columnList = "is_active")
 }, uniqueConstraints = {
-    @UniqueConstraint(name = "uk_leagues_provider_external_id", columnNames = {"provider_id", "external_id"})
+    @UniqueConstraint(name = "uk_sports_key", columnNames = "sport_key")
 })
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class League {
+public class Sport {
 
     @Id
     @GeneratedValue(generator = "UUID")
@@ -30,28 +30,23 @@ public class League {
     @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
-    @Column(name = "external_id", length = 100)
-    private String externalId;
+    @Column(name = "sport_key", nullable = false, unique = true, length = 100)
+    private String sportKey; // e.g., "soccer_epl", "basketball_nba"
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "provider_id", foreignKey = @ForeignKey(name = "fk_leagues_provider"))
-    private Provider provider;
+    @Column(name = "title", nullable = false, length = 255)
+    private String title; // e.g., "EPL", "NBA"
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "sport_id", foreignKey = @ForeignKey(name = "fk_leagues_sport"))
-    private Sport sport;
+    @Column(name = "description", columnDefinition = "TEXT")
+    private String description; // e.g., "English Premier League"
 
-    @Column(name = "name", nullable = false, length = 255)
-    private String name;
-
-    @Column(name = "country", length = 100)
-    private String country;
-
-    @Column(name = "logo_url", columnDefinition = "TEXT")
-    private String logoUrl;
+    @Column(name = "sport_group", nullable = false, length = 100)
+    private String sportGroup; // e.g., "Soccer", "Basketball", "American Football"
 
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
+
+    @Column(name = "has_outrights", nullable = false)
+    private Boolean hasOutrights = false;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;

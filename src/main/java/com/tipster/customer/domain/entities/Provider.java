@@ -11,18 +11,18 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "leagues", indexes = {
-    @Index(name = "idx_leagues_name", columnList = "name"),
-    @Index(name = "idx_leagues_country", columnList = "country"),
-    @Index(name = "idx_leagues_is_active", columnList = "is_active")
+@Table(name = "providers", indexes = {
+    @Index(name = "idx_providers_name", columnList = "name"),
+    @Index(name = "idx_providers_code", columnList = "code"),
+    @Index(name = "idx_providers_is_active", columnList = "is_active")
 }, uniqueConstraints = {
-    @UniqueConstraint(name = "uk_leagues_provider_external_id", columnNames = {"provider_id", "external_id"})
+    @UniqueConstraint(name = "uk_providers_code", columnNames = "code")
 })
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class League {
+public class Provider {
 
     @Id
     @GeneratedValue(generator = "UUID")
@@ -30,28 +30,32 @@ public class League {
     @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
-    @Column(name = "external_id", length = 100)
-    private String externalId;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "provider_id", foreignKey = @ForeignKey(name = "fk_leagues_provider"))
-    private Provider provider;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "sport_id", foreignKey = @ForeignKey(name = "fk_leagues_sport"))
-    private Sport sport;
+    @Column(name = "code", nullable = false, unique = true, length = 50)
+    private String code; // e.g., "THE_ODDS_API"
 
     @Column(name = "name", nullable = false, length = 255)
-    private String name;
+    private String name; // e.g., "The Odds API"
 
-    @Column(name = "country", length = 100)
-    private String country;
+    @Column(name = "base_url", nullable = false, columnDefinition = "TEXT")
+    private String baseUrl; // e.g., "https://api.the-odds-api.com/v4"
 
-    @Column(name = "logo_url", columnDefinition = "TEXT")
-    private String logoUrl;
+    @Column(name = "api_key", columnDefinition = "TEXT")
+    private String apiKey; // Encrypted or stored securely
+
+    @Column(name = "description", columnDefinition = "TEXT")
+    private String description;
 
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
+
+    @Column(name = "rate_limit_per_minute")
+    private Integer rateLimitPerMinute;
+
+    @Column(name = "rate_limit_per_day")
+    private Integer rateLimitPerDay;
+
+    @Column(name = "configuration", columnDefinition = "JSONB")
+    private String configuration; // Additional provider-specific config as JSON
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
