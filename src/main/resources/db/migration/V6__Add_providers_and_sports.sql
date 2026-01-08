@@ -37,10 +37,14 @@ CREATE INDEX idx_sports_group ON sports(sport_group);
 CREATE INDEX idx_sports_key ON sports(sport_key);
 CREATE INDEX idx_sports_is_active ON sports(is_active);
 
+-- Add description column to leagues table if it doesn't exist
+ALTER TABLE leagues 
+    ADD COLUMN IF NOT EXISTS description TEXT;
+
 -- Add provider_id and sport_id to leagues table (nullable initially for existing data)
 ALTER TABLE leagues 
-    ADD COLUMN provider_id UUID REFERENCES providers(id) ON DELETE RESTRICT,
-    ADD COLUMN sport_id UUID REFERENCES sports(id) ON DELETE RESTRICT;
+    ADD COLUMN IF NOT EXISTS provider_id UUID REFERENCES providers(id) ON DELETE RESTRICT,
+    ADD COLUMN IF NOT EXISTS sport_id UUID REFERENCES sports(id) ON DELETE RESTRICT;
 
 -- Drop old unique constraint on external_id if it exists
 ALTER TABLE leagues DROP CONSTRAINT IF EXISTS uk_leagues_external_id;

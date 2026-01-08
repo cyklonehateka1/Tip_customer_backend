@@ -44,6 +44,9 @@ public class League {
     @Column(name = "name", nullable = false, length = 255)
     private String name;
 
+    @Column(name = "description", columnDefinition = "TEXT")
+    private String description;
+
     @Column(name = "country", length = 100)
     private String country;
 
