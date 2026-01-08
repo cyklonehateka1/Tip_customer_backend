@@ -37,6 +37,15 @@ public class GlobalExceptionHandler {
         logger.error("Validation error: {}", ex.getMessage());
         Map<String, List<String>> errors = new HashMap<>();
         errors.put("errors", ex.getErrors());
+        
+        // Check if this is an authentication error - return 401 instead of 400
+        String message = ex.getMessage().toLowerCase();
+        if (message.contains("not authenticated") || message.contains("authentication required") 
+            || message.contains("invalid credentials") || message.contains("invalid email or password")) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(ApiResponse.failure(ex.getMessage(), errors));
+        }
+        
         return ResponseEntity.badRequest().body(ApiResponse.failure(ex.getMessage(), errors));
     }
 

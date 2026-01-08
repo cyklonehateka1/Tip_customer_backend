@@ -7,4 +7,5 @@ import org.springframework.security.core.Authentication;
 public interface AuthService {
     AuthResponse login(LoginRequest request);
     AuthResponse getCurrentUser(Authentication authentication);
+    void logout(Authentication authentication);
 }

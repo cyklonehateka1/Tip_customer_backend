@@ -32,4 +32,10 @@ public class AuthController {
         AuthResponse response = authService.getCurrentUser(authentication);
         return ResponseEntity.ok(ApiResponse.success("Session retrieved successfully", response));
     }
+
+    @PostMapping("/logout")
+    public ResponseEntity<ApiResponse<Object>> logout(Authentication authentication) {
+        authService.logout(authentication);
+        return ResponseEntity.ok(ApiResponse.success("Logout successful", null));
+    }
 }

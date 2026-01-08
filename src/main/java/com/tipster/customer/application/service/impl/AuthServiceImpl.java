@@ -20,7 +20,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
-public class AuthServiceImpl implements AuthService {
+public  class AuthServiceImpl implements AuthService {
 
     private final UserRepository userRepository;
     private final UserRoleRepository userRoleRepository;
@@ -87,5 +87,17 @@ public class AuthServiceImpl implements AuthService {
         response.setDisplayName(user.getDisplayName());
         response.setRole(primaryRole);
         return response;
+    }
+
+    @Override
+    public void logout(Authentication authentication) {
+        // Logout implementation
+        // Since JWT is stateless, we can't invalidate the token server-side without a blacklist
+        // The frontend will clear the token immediately, which effectively logs the user out
+        // In a production system, you might want to implement a token blacklist using Redis/cache
+        if (authentication != null && authentication.isAuthenticated()) {
+            // Token invalidation logic can be added here if using a blacklist
+            // For now, we just acknowledge the logout request
+        }
     }
 }
