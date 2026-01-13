@@ -8,6 +8,9 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.GenericGenerator;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
+
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
@@ -83,6 +86,10 @@ public class Match {
 
     @Column(name = "last_synced_at")
     private OffsetDateTime lastSyncedAt;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "odds_json", columnDefinition = "jsonb")
+    private String oddsJson;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
