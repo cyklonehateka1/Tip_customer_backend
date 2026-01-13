@@ -2,12 +2,11 @@ package com.tipster.customer.application.service.impl;
 
 import com.tipster.customer.application.service.LeagueService;
 import com.tipster.customer.domain.entities.League;
-import com.tipster.customer.domain.entities.Sport;
 import com.tipster.customer.domain.models.dto.LeagueResponse;
 import com.tipster.customer.domain.repository.LeagueRepository;
-import com.tipster.customer.domain.repository.SportRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,38 +19,30 @@ import java.util.stream.Collectors;
 public class LeagueServiceImpl implements LeagueService {
 
     private final LeagueRepository leagueRepository;
-    private final SportRepository sportRepository;
 
     private static final String SOCCER_GROUP = "Soccer";
+    private static final String CACHE_NAME = "leagues";
 
     @Override
     @Transactional(readOnly = true)
+    @Cacheable(value = CACHE_NAME, key = "'football'", unless = "#result.isEmpty()")
     public List<LeagueResponse> getFootballLeagues() {
         return getLeaguesBySportGroup(SOCCER_GROUP);
     }
 
     @Override
     @Transactional(readOnly = true)
+    @Cacheable(value = CACHE_NAME, key = "#sportGroup", unless = "#result.isEmpty()")
     public List<LeagueResponse> getLeaguesBySportGroup(String sportGroup) {
-        log.info("Fetching leagues for sport group: {} from database", sportGroup);
+        log.debug("Fetching leagues for sport group: {} from database", sportGroup);
 
-        // Get sports for this sport group
-        List<Sport> sports = sportRepository.findBySportGroup(sportGroup);
+        // Single optimized query with JOIN FETCH to avoid N+1 problem
+        // This fetches all active leagues with their sport relationship in one query
+        List<League> leagues = leagueRepository.findActiveLeaguesBySportGroupWithSport(sportGroup);
+
+        log.debug("Found {} active leagues in DB for sport group: {}", leagues.size(), sportGroup);
         
-        if (sports.isEmpty()) {
-            log.warn("No sports found in DB for group: {}", sportGroup);
-            return List.of();
-        }
-
-        // Get all leagues from DB that match the sport group
-        List<League> dbLeagues = sports.stream()
-                .flatMap(sport -> leagueRepository.findBySport(sport).stream())
-                .filter(league -> league.getIsActive() != null && league.getIsActive())
-                .collect(Collectors.toList());
-
-        log.info("Found {} active leagues in DB for sport group: {}", dbLeagues.size(), sportGroup);
-        
-        return dbLeagues.stream()
+        return leagues.stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
@@ -62,10 +53,16 @@ public class LeagueServiceImpl implements LeagueService {
         response.setExternalId(league.getExternalId());
         response.setName(league.getName());
         response.setDescription(league.getDescription());
+        
+        // Country and logoUrl are included in the response for all leagues
+        // Country may be null for international tournaments (e.g., UEFA Champions League)
+        // LogoUrl may be null if not yet set
         response.setCountry(league.getCountry());
         response.setLogoUrl(league.getLogoUrl());
+        
         response.setIsActive(league.getIsActive());
         
+        // Sport is already eagerly loaded via JOIN FETCH, no additional query needed
         if (league.getSport() != null) {
             response.setSportKey(league.getSport().getSportKey());
             response.setSportGroup(league.getSport().getSportGroup());
