@@ -1,6 +1,7 @@
 package com.tipster.customer.infrastructure.external.theoddsapi;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tipster.customer.domain.models.dto.OddsApiSportResponse;
 import com.tipster.customer.infrastructure.utils.HttpHelper;
@@ -67,5 +68,85 @@ public class TheOddsApiClient {
         return allSports.stream()
                 .filter(sport -> sportGroup.equalsIgnoreCase(sport.getGroup()))
                 .toList();
+    }
+
+    /**
+     * Fetches upcoming matches with odds from The Odds API
+     * 
+     * @param sportKey The sport key (e.g., "soccer_epl", "soccer_spain_la_liga")
+     * @param regions Comma-separated regions (e.g., "us", "uk", "eu")
+     * @param markets Comma-separated markets (e.g., "h2h,spreads,totals")
+     * @return JSON string response from The Odds API
+     */
+    public String fetchMatchesWithOdds(String sportKey, String regions, String markets) {
+        return fetchOdds(sportKey, regions, markets, null, null, "decimal");
+    }
+
+    /**
+     * Fetches matches with odds from The Odds API with date filtering
+     * 
+     * @param sportKey The sport key (e.g., "soccer_epl", "soccer_spain_la_liga")
+     * @param regions Comma-separated regions (e.g., "us", "uk", "eu")
+     * @param markets Comma-separated markets (e.g., "h2h,spreads,totals")
+     * @param commenceTimeFrom Start date in ISO 8601 format (e.g., "2024-01-12T00:00:00Z")
+     * @param commenceTimeTo End date in ISO 8601 format (e.g., "2024-01-14T23:59:59Z")
+     * @param oddsFormat Odds format: "decimal" or "american" (default: "decimal")
+     * @return JSON string response from The Odds API
+     */
+    public String fetchOdds(String sportKey, String regions, String markets, 
+                           String commenceTimeFrom, String commenceTimeTo, String oddsFormat) {
+        try {
+            StringBuilder urlBuilder = new StringBuilder(BASE_URL)
+                    .append("/sports/")
+                    .append(URLEncoder.encode(sportKey, StandardCharsets.UTF_8))
+                    .append("/odds")
+                    .append("?apiKey=").append(URLEncoder.encode(apiKey, StandardCharsets.UTF_8))
+                    .append("&regions=").append(URLEncoder.encode(regions, StandardCharsets.UTF_8))
+                    .append("&markets=").append(URLEncoder.encode(markets, StandardCharsets.UTF_8))
+                    .append("&oddsFormat=").append(URLEncoder.encode(oddsFormat, StandardCharsets.UTF_8));
+            
+            // Add date filters if provided
+            if (commenceTimeFrom != null && !commenceTimeFrom.isEmpty()) {
+                urlBuilder.append("&commenceTimeFrom=")
+                        .append(URLEncoder.encode(commenceTimeFrom, StandardCharsets.UTF_8));
+            }
+            if (commenceTimeTo != null && !commenceTimeTo.isEmpty()) {
+                urlBuilder.append("&commenceTimeTo=")
+                        .append(URLEncoder.encode(commenceTimeTo, StandardCharsets.UTF_8));
+            }
+            
+            String url = urlBuilder.toString();
+            log.debug("Fetching matches with odds from The Odds API: {}", url);
+            String responseBody = HttpHelper.get(url, null);
+            
+            // Log response size for debugging
+            if (responseBody != null) {
+                log.debug("API response size: {} characters for sport: {} (markets: {})", 
+                        responseBody.length(), sportKey, markets);
+                
+                // Check if response is empty array
+                String trimmed = responseBody.trim();
+                if ("[]".equals(trimmed)) {
+                    log.debug("API returned empty array for sport: {} (markets: {})", sportKey, markets);
+                }
+                
+                // Check if response is an error object
+                try {
+                    JsonNode root = objectMapper.readTree(responseBody);
+                    if (!root.isArray() && root.has("message")) {
+                        log.warn("API returned error for sport: {} (markets: {}). Message: {}", 
+                                sportKey, markets, root.get("message").asText());
+                    }
+                } catch (Exception e) {
+                    // Not JSON or parsing failed, ignore
+                }
+            }
+            
+            log.info("Successfully fetched matches with odds for sport: {} (markets: {})", sportKey, markets);
+            return responseBody;
+        } catch (Exception e) {
+            log.error("Error fetching matches with odds from The Odds API for sport: {}", sportKey, e);
+            throw new RuntimeException("Failed to fetch matches with odds: " + e.getMessage(), e);
+        }
     }
 }

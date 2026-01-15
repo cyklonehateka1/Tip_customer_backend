@@ -52,13 +52,12 @@ public class LeagueServiceImpl implements LeagueService {
         response.setId(league.getId());
         response.setExternalId(league.getExternalId());
         response.setName(league.getName());
-        response.setDescription(league.getDescription());
+        response.setDescription(null);
         
-        // Country and logoUrl are included in the response for all leagues
+        // Country is included in the response for all leagues
         // Country may be null for international tournaments (e.g., UEFA Champions League)
-        // LogoUrl may be null if not yet set
         response.setCountry(league.getCountry());
-        response.setLogoUrl(league.getLogoUrl());
+        response.setLogoUrl(null);
         
         response.setIsActive(league.getIsActive());
         

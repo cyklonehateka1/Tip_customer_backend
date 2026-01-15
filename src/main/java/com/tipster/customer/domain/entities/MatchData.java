@@ -1,7 +1,6 @@
 package com.tipster.customer.domain.entities;
 
 import com.tipster.customer.domain.enums.MatchStatusType;
-import com.tipster.customer.infrastructure.utils.MatchStatusTypeConverter;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -14,23 +13,27 @@ import org.hibernate.type.SqlTypes;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
+/**
+ * Entity for the match_data table
+ * Stores match information from The Odds API
+ */
 @Entity
-@Table(name = "matches", indexes = {
-    @Index(name = "idx_matches_league_id", columnList = "league_id"),
-    @Index(name = "idx_matches_home_team_id", columnList = "home_team_id"),
-    @Index(name = "idx_matches_away_team_id", columnList = "away_team_id"),
-    @Index(name = "idx_matches_match_date", columnList = "match_date"),
-    @Index(name = "idx_matches_status", columnList = "status"),
-    @Index(name = "idx_matches_external_id", columnList = "external_id"),
-    @Index(name = "idx_matches_date_status", columnList = "match_date,status")
+@Table(name = "match_data", indexes = {
+    @Index(name = "idx_match_data_external_id", columnList = "external_id"),
+    @Index(name = "idx_match_data_league_id", columnList = "league_id"),
+    @Index(name = "idx_match_data_home_team_id", columnList = "home_team_id"),
+    @Index(name = "idx_match_data_away_team_id", columnList = "away_team_id"),
+    @Index(name = "idx_match_data_match_datetime", columnList = "match_datetime"),
+    @Index(name = "idx_match_data_status", columnList = "status"),
+    @Index(name = "idx_match_data_datetime_status", columnList = "match_datetime,status")
 }, uniqueConstraints = {
-    @UniqueConstraint(name = "uk_matches_external_id", columnNames = "external_id")
+    @UniqueConstraint(name = "uk_match_data_external_id", columnNames = "external_id")
 })
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class Match {
+public class MatchData {
 
     @Id
     @GeneratedValue(generator = "UUID")
@@ -38,26 +41,25 @@ public class Match {
     @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
-    @Column(name = "external_id", length = 100, unique = true)
+    @Column(name = "external_id", length = 100, unique = true, nullable = false)
     private String externalId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "league_id", foreignKey = @ForeignKey(name = "fk_matches_league"))
+    @JoinColumn(name = "league_id", foreignKey = @ForeignKey(name = "fk_match_data_league"))
     private League league;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "home_team_id", nullable = false, foreignKey = @ForeignKey(name = "fk_matches_home_team"))
+    @JoinColumn(name = "home_team_id", nullable = false, foreignKey = @ForeignKey(name = "fk_match_data_home_team"))
     private Team homeTeam;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "away_team_id", nullable = false, foreignKey = @ForeignKey(name = "fk_matches_away_team"))
+    @JoinColumn(name = "away_team_id", nullable = false, foreignKey = @ForeignKey(name = "fk_match_data_away_team"))
     private Team awayTeam;
 
-    @Column(name = "match_date", nullable = false)
-    private OffsetDateTime matchDate;
+    @Column(name = "match_datetime", nullable = false)
+    private OffsetDateTime matchDatetime;
 
-    @Convert(converter = MatchStatusTypeConverter.class)
-    @JdbcTypeCode(SqlTypes.OTHER)
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
     @Column(name = "status", nullable = false, columnDefinition = "match_status_type")
     private MatchStatusType status = MatchStatusType.scheduled;
 
@@ -96,7 +98,9 @@ public class Match {
 
     @PrePersist
     protected void onCreate() {
-        createdAt = OffsetDateTime.now();
+        if (createdAt == null) {
+            createdAt = OffsetDateTime.now();
+        }
         updatedAt = OffsetDateTime.now();
     }
 
