@@ -1,6 +1,7 @@
 package com.tipster.customer.infrastructure.external.theoddsapi;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tipster.customer.domain.models.dto.OddsApiSportResponse;
 import com.tipster.customer.infrastructure.utils.HttpHelper;
@@ -117,6 +118,29 @@ public class TheOddsApiClient {
             String url = urlBuilder.toString();
             log.debug("Fetching matches with odds from The Odds API: {}", url);
             String responseBody = HttpHelper.get(url, null);
+            
+            // Log response size for debugging
+            if (responseBody != null) {
+                log.debug("API response size: {} characters for sport: {} (markets: {})", 
+                        responseBody.length(), sportKey, markets);
+                
+                // Check if response is empty array
+                String trimmed = responseBody.trim();
+                if ("[]".equals(trimmed)) {
+                    log.debug("API returned empty array for sport: {} (markets: {})", sportKey, markets);
+                }
+                
+                // Check if response is an error object
+                try {
+                    JsonNode root = objectMapper.readTree(responseBody);
+                    if (!root.isArray() && root.has("message")) {
+                        log.warn("API returned error for sport: {} (markets: {}). Message: {}", 
+                                sportKey, markets, root.get("message").asText());
+                    }
+                } catch (Exception e) {
+                    // Not JSON or parsing failed, ignore
+                }
+            }
             
             log.info("Successfully fetched matches with odds for sport: {} (markets: {})", sportKey, markets);
             return responseBody;

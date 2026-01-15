@@ -38,9 +38,9 @@ public class MatchServiceImpl implements MatchService {
         List<Match> matches;
 
         if (leagueId != null) {
-            matches = matchRepository.findUpcomingMatchesByLeague(leagueId, now, MatchStatusType.SCHEDULED);
+            matches = matchRepository.findUpcomingMatchesByLeague(leagueId, now, MatchStatusType.scheduled);
         } else {
-            matches = matchRepository.findUpcomingMatches(now, MatchStatusType.SCHEDULED);
+            matches = matchRepository.findUpcomingMatches(now, MatchStatusType.scheduled);
         }
 
         if (isTipster) {
@@ -59,7 +59,7 @@ public class MatchServiceImpl implements MatchService {
     public List<?> getUpcomingMatchesByLeagueExternalId(String leagueExternalId, boolean isTipster) {
         OffsetDateTime now = OffsetDateTime.now();
         List<Match> matches = matchRepository.findUpcomingMatchesByLeagueExternalId(
-                leagueExternalId, now, MatchStatusType.SCHEDULED);
+                leagueExternalId, now, MatchStatusType.scheduled);
 
         if (isTipster) {
             return matches.stream()
@@ -88,7 +88,7 @@ public class MatchServiceImpl implements MatchService {
             leagueInfo.setId(match.getLeague().getId());
             leagueInfo.setExternalId(match.getLeague().getExternalId());
             leagueInfo.setName(match.getLeague().getName());
-            leagueInfo.setLogoUrl(match.getLeague().getLogoUrl());
+            leagueInfo.setLogoUrl(null);
             leagueInfo.setCountry(match.getLeague().getCountry());
             response.setLeague(leagueInfo);
         }
@@ -132,7 +132,7 @@ public class MatchServiceImpl implements MatchService {
             leagueInfo.setId(match.getLeague().getId());
             leagueInfo.setExternalId(match.getLeague().getExternalId());
             leagueInfo.setName(match.getLeague().getName());
-            leagueInfo.setLogoUrl(match.getLeague().getLogoUrl());
+            leagueInfo.setLogoUrl(null);
             leagueInfo.setCountry(match.getLeague().getCountry());
             response.setLeague(leagueInfo);
         }

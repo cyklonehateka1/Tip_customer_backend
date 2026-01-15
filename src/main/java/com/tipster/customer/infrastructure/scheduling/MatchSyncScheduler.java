@@ -9,12 +9,18 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * Scheduled job for automatically syncing matches from The Odds API
+ * Scheduled jobs for automatically syncing matches from The Odds API
+ * 
+ * Multiple sync types with different date ranges:
+ * - 24-hour sync: Frequent updates for upcoming matches (next 1 day)
+ * - Weekly sync: Regular sync for upcoming matches (next 7 days) - DEFAULT ENABLED
+ * - Monthly sync: Extended sync for future matches (next 30 days)
  * 
  * Configuration:
- * - match.sync.enabled: Enable/disable scheduled sync (default: true)
- * - match.sync.upcoming-days: Number of days ahead to sync (default: 7)
- * - match.sync.interval-hours: Sync interval in hours (default: 6)
+ * - match.sync.enabled: Enable/disable all scheduled syncs (default: true)
+ * - match.sync.24h.enabled: Enable 24-hour sync (default: false)
+ * - match.sync.weekly.enabled: Enable weekly sync (default: true)
+ * - match.sync.monthly.enabled: Enable monthly sync (default: false)
  */
 @Component
 @RequiredArgsConstructor
@@ -24,60 +30,76 @@ public class MatchSyncScheduler {
 
     private final MatchSyncService matchSyncService;
 
-    @Value("${match.sync.upcoming-days:7}")
-    private int upcomingDays;
-
-    @Value("${match.sync.interval-hours:6}")
-    private int intervalHours;
-
     /**
-     * Scheduled job to sync matches for all active leagues
-     * Runs every 6 hours by default (configurable via match.sync.interval-hours)
-     * 
-     * Cron expression: "0 0 */6 * * ?" = Every 6 hours at minute 0
-     * Or use fixed delay: Runs 6 hours after previous completion
+     * 24-Hour Sync: Frequent updates for upcoming matches (next 24 hours)
+     * Runs every 2 hours
+     * Purpose: Keep odds fresh for matches happening soon
      */
-    @Scheduled(fixedDelayString = "${match.sync.interval-milliseconds:21600000}", initialDelay = 60000)
-    // Alternative: @Scheduled(cron = "${match.sync.cron:0 0 */6 * * ?}")
-    public void syncMatchesForAllActiveLeagues() {
-        log.info("Starting scheduled match sync for all active leagues (next {} days)", upcomingDays);
+    @Scheduled(fixedDelayString = "${match.sync.24h.interval-milliseconds:7200000}", initialDelay = 180000)
+    @ConditionalOnProperty(name = "match.sync.24h.enabled", havingValue = "true", matchIfMissing = false)
+    public void sync24HourMatches() {
+        log.info("Starting 24-hour match sync (next 1 day)");
         
         long startTime = System.currentTimeMillis();
         
         try {
-            int totalSynced = matchSyncService.syncMatchesForAllActiveLeagues(upcomingDays);
+            int totalSynced = matchSyncService.syncMatchesForAllActiveLeagues(1);
             
             long duration = System.currentTimeMillis() - startTime;
-            log.info("Completed scheduled match sync: {} matches synced in {} ms", totalSynced, duration);
+            log.info("Completed 24-hour match sync: {} matches synced in {} ms", totalSynced, duration);
             
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;
-            log.error("Error during scheduled match sync after {} ms: {}", duration, e.getMessage(), e);
-            // Don't throw exception - let the scheduler continue
+            log.error("Error during 24-hour match sync after {} ms: {}", duration, e.getMessage(), e);
         }
     }
 
     /**
-     * Optional: More frequent sync for live/upcoming matches (next 24 hours)
-     * Runs every 2 hours
+     * Weekly Sync: Regular sync for upcoming matches (next 7 days)
+     * Runs every 6 hours
+     * Purpose: Main sync to populate database with upcoming matches
+     * DEFAULT: ENABLED
      */
-    @Scheduled(fixedDelayString = "${match.sync.live-interval-milliseconds:7200000}", initialDelay = 120000)
-    @ConditionalOnProperty(name = "match.sync.live-enabled", havingValue = "true", matchIfMissing = false)
-    public void syncLiveMatches() {
-        log.info("Starting scheduled sync for live/upcoming matches (next 24 hours)");
+    @Scheduled(fixedDelayString = "${match.sync.weekly.interval-milliseconds:21600000}", initialDelay = 60000)
+    @ConditionalOnProperty(name = "match.sync.weekly.enabled", havingValue = "true", matchIfMissing = true)
+    public void syncWeeklyMatches() {
+        log.info("Starting weekly match sync (next 7 days)");
         
         long startTime = System.currentTimeMillis();
         
         try {
-            // Sync matches for next 24 hours (more frequent updates)
-            int totalSynced = matchSyncService.syncMatchesForAllActiveLeagues(1);
+            int totalSynced = matchSyncService.syncMatchesForAllActiveLeagues(7);
             
             long duration = System.currentTimeMillis() - startTime;
-            log.info("Completed live match sync: {} matches synced in {} ms", totalSynced, duration);
+            log.info("Completed weekly match sync: {} matches synced in {} ms", totalSynced, duration);
             
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - startTime;
-            log.error("Error during live match sync after {} ms: {}", duration, e.getMessage(), e);
+            log.error("Error during weekly match sync after {} ms: {}", duration, e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Monthly Sync: Extended sync for future matches (next 30 days)
+     * Runs every 12 hours
+     * Purpose: Get future matches scheduled well in advance
+     */
+    @Scheduled(fixedDelayString = "${match.sync.monthly.interval-milliseconds:43200000}", initialDelay = 240000)
+    @ConditionalOnProperty(name = "match.sync.monthly.enabled", havingValue = "true", matchIfMissing = false)
+    public void syncMonthlyMatches() {
+        log.info("Starting monthly match sync (next 30 days)");
+        
+        long startTime = System.currentTimeMillis();
+        
+        try {
+            int totalSynced = matchSyncService.syncMatchesForAllActiveLeagues(30);
+            
+            long duration = System.currentTimeMillis() - startTime;
+            log.info("Completed monthly match sync: {} matches synced in {} ms", totalSynced, duration);
+            
+        } catch (Exception e) {
+            long duration = System.currentTimeMillis() - startTime;
+            log.error("Error during monthly match sync after {} ms: {}", duration, e.getMessage(), e);
         }
     }
 }

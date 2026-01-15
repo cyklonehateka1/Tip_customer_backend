@@ -54,9 +54,6 @@ public class Provider {
     @Column(name = "rate_limit_per_day")
     private Integer rateLimitPerDay;
 
-    @Column(name = "configuration", columnDefinition = "JSONB")
-    private String configuration; // Additional provider-specific config as JSON
-
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
