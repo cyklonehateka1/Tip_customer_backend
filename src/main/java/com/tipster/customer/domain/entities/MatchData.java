@@ -90,6 +90,9 @@ public class MatchData {
     @Column(name = "last_synced_at")
     private OffsetDateTime lastSyncedAt;
 
+    @Column(name = "odds", columnDefinition = "TEXT")
+    private String odds;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 
