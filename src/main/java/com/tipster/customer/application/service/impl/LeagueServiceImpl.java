@@ -57,7 +57,7 @@ public class LeagueServiceImpl implements LeagueService {
         // Country is included in the response for all leagues
         // Country may be null for international tournaments (e.g., UEFA Champions League)
         response.setCountry(league.getCountry());
-        response.setLogoUrl(null);
+        response.setLogoUrl(league.getLogoUrl());
         
         response.setIsActive(league.getIsActive());
         

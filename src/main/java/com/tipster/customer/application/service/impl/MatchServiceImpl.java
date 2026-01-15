@@ -3,11 +3,11 @@ package com.tipster.customer.application.service.impl;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.tipster.customer.application.service.MatchService;
-import com.tipster.customer.domain.entities.Match;
+import com.tipster.customer.domain.entities.MatchData;
 import com.tipster.customer.domain.enums.MatchStatusType;
 import com.tipster.customer.domain.models.dto.MatchBasicResponse;
 import com.tipster.customer.domain.models.dto.MatchDetailedResponse;
-import com.tipster.customer.domain.repository.MatchRepository;
+import com.tipster.customer.domain.repository.MatchDataRepository;
 import com.tipster.customer.infrastructure.external.theoddsapi.TheOddsApiClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class MatchServiceImpl implements MatchService {
 
-    private final MatchRepository matchRepository;
+    private final MatchDataRepository matchDataRepository;
     private final TheOddsApiClient oddsApiClient;
     private final ObjectMapper objectMapper;
 
@@ -35,12 +35,12 @@ public class MatchServiceImpl implements MatchService {
     @Transactional(readOnly = true)
     public List<?> getUpcomingMatches(UUID leagueId, boolean isTipster) {
         OffsetDateTime now = OffsetDateTime.now();
-        List<Match> matches;
+        List<MatchData> matches;
 
         if (leagueId != null) {
-            matches = matchRepository.findUpcomingMatchesByLeague(leagueId, now, MatchStatusType.scheduled);
+            matches = matchDataRepository.findUpcomingMatchesByLeague(leagueId, now, MatchStatusType.scheduled);
         } else {
-            matches = matchRepository.findUpcomingMatches(now, MatchStatusType.scheduled);
+            matches = matchDataRepository.findUpcomingMatches(now, MatchStatusType.scheduled);
         }
 
         if (isTipster) {
@@ -58,7 +58,7 @@ public class MatchServiceImpl implements MatchService {
     @Transactional(readOnly = true)
     public List<?> getUpcomingMatchesByLeagueExternalId(String leagueExternalId, boolean isTipster) {
         OffsetDateTime now = OffsetDateTime.now();
-        List<Match> matches = matchRepository.findUpcomingMatchesByLeagueExternalId(
+        List<MatchData> matches = matchDataRepository.findUpcomingMatchesByLeagueExternalId(
                 leagueExternalId, now, MatchStatusType.scheduled);
 
         if (isTipster) {
@@ -72,11 +72,11 @@ public class MatchServiceImpl implements MatchService {
         }
     }
 
-    private MatchBasicResponse mapToBasicResponse(Match match) {
+    private MatchBasicResponse mapToBasicResponse(MatchData match) {
         MatchBasicResponse response = new MatchBasicResponse();
         response.setId(match.getId());
         response.setExternalId(match.getExternalId());
-        response.setMatchDate(match.getMatchDate());
+        response.setMatchDate(match.getMatchDatetime());
         response.setStatus(match.getStatus().name());
         response.setVenue(match.getVenue());
         response.setRound(match.getRound());
@@ -88,7 +88,7 @@ public class MatchServiceImpl implements MatchService {
             leagueInfo.setId(match.getLeague().getId());
             leagueInfo.setExternalId(match.getLeague().getExternalId());
             leagueInfo.setName(match.getLeague().getName());
-            leagueInfo.setLogoUrl(null);
+            leagueInfo.setLogoUrl(match.getLeague().getLogoUrl());
             leagueInfo.setCountry(match.getLeague().getCountry());
             response.setLeague(leagueInfo);
         }
@@ -116,11 +116,11 @@ public class MatchServiceImpl implements MatchService {
         return response;
     }
 
-    private MatchDetailedResponse mapToDetailedResponse(Match match) {
+    private MatchDetailedResponse mapToDetailedResponse(MatchData match) {
         MatchDetailedResponse response = new MatchDetailedResponse();
         response.setId(match.getId());
         response.setExternalId(match.getExternalId());
-        response.setMatchDate(match.getMatchDate());
+        response.setMatchDate(match.getMatchDatetime());
         response.setStatus(match.getStatus().name());
         response.setVenue(match.getVenue());
         response.setRound(match.getRound());
@@ -132,7 +132,7 @@ public class MatchServiceImpl implements MatchService {
             leagueInfo.setId(match.getLeague().getId());
             leagueInfo.setExternalId(match.getLeague().getExternalId());
             leagueInfo.setName(match.getLeague().getName());
-            leagueInfo.setLogoUrl(null);
+            leagueInfo.setLogoUrl(match.getLeague().getLogoUrl());
             leagueInfo.setCountry(match.getLeague().getCountry());
             response.setLeague(leagueInfo);
         }
@@ -172,7 +172,7 @@ public class MatchServiceImpl implements MatchService {
         return response;
     }
 
-    private MatchDetailedResponse.MatchOdds fetchAndMapOdds(String sportKey, Match match) {
+    private MatchDetailedResponse.MatchOdds fetchAndMapOdds(String sportKey, MatchData match) {
         try {
             String oddsJson = oddsApiClient.fetchMatchesWithOdds(sportKey, DEFAULT_REGIONS, DEFAULT_MARKETS);
             JsonNode oddsArray = objectMapper.readTree(oddsJson);

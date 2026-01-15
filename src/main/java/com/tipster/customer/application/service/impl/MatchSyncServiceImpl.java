@@ -52,9 +52,11 @@ public class MatchSyncServiceImpl implements MatchSyncService {
             "soccer_france_ligue_one"        // Ligue 1 - France
     );
 
-    // Use simple h2h market - most common and reliable
+    // Default regions and markets for The Odds API
     private static final String DEFAULT_REGIONS = "us,uk,eu";
-    private static final String H2H_MARKET = "h2h";
+    // Request only the markets we need: h2h (match_result), totals (over_under), btts, double_chance, spreads (handicap)
+    // Note: alternate_totals and alternate_spreads require the /events/{eventId}/odds endpoint
+    private static final String ALL_MARKETS = "h2h,totals,btts,double_chance,spreads";
     
     // Date formatting for The Odds API (YYYY-MM-DDTHH:MM:SSZ, no fractional seconds)
     private static final DateTimeFormatter ODDS_API_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'");
@@ -113,14 +115,14 @@ public class MatchSyncServiceImpl implements MatchSyncService {
             String startDateStr = startDate.withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.SECONDS).format(ODDS_API_DATE_FORMATTER);
             String endDateStr = endDate.withOffsetSameInstant(ZoneOffset.UTC).truncatedTo(ChronoUnit.SECONDS).format(ODDS_API_DATE_FORMATTER);
 
-            // Fetch matches from API using h2h market (most common and reliable)
-            log.debug("Fetching matches for league: {} using h2h market", leagueExternalId);
+            // Fetch matches from API with required markets (h2h, totals, btts, double_chance, spreads)
+            log.debug("Fetching matches for league: {} using markets: {}", leagueExternalId, ALL_MARKETS);
             String matchesJson;
             try {
                 matchesJson = oddsApiClient.fetchOdds(
                         leagueExternalId,
                         DEFAULT_REGIONS,
-                        H2H_MARKET,
+                        ALL_MARKETS,
                         startDateStr,
                         endDateStr,
                         "decimal"
@@ -291,6 +293,16 @@ public class MatchSyncServiceImpl implements MatchSyncService {
             // Set status (default to scheduled)
             match.setStatus(MatchStatusType.scheduled);
 
+            // Parse and set odds from bookmakers (prefer betway, fallback to others)
+            // Always update odds even if match exists
+            String oddsJsonString = extractOddsFromMatchData(matchData, homeTeamName, awayTeamName);
+            if (oddsJsonString != null && !oddsJsonString.isEmpty()) {
+                match.setOdds(oddsJsonString);
+                log.debug("Extracted odds for match {}: {}", externalId, oddsJsonString);
+            } else {
+                log.debug("No odds found for match {}", externalId);
+            }
+
             // Update last synced timestamp
             match.setLastSyncedAt(OffsetDateTime.now());
 
@@ -405,5 +417,361 @@ public class MatchSyncServiceImpl implements MatchSyncService {
         }
         
         return null;
+    }
+
+    /**
+     * Extract all available odds from match data, preferring betway, falling back to other bookmakers
+     * Returns stringified JSON matching frontend BettingMarkets format
+     * Extracts: match_result, over_under, btts, double_chance, handicap
+     */
+    private String extractOddsFromMatchData(JsonNode matchData, String homeTeamName, String awayTeamName) {
+        try {
+            JsonNode bookmakers = matchData.path("bookmakers");
+            if (!bookmakers.isArray() || bookmakers.isEmpty()) {
+                log.debug("No bookmakers found in match data");
+                return null;
+            }
+
+            // First, try to find betway
+            JsonNode betwayBookmaker = null;
+            JsonNode fallbackBookmaker = null;
+
+            for (JsonNode bookmaker : bookmakers) {
+                String bookmakerKey = bookmaker.path("key").asText();
+                if ("betway".equals(bookmakerKey)) {
+                    betwayBookmaker = bookmaker;
+                    break;
+                }
+                // Store first available bookmaker as fallback
+                if (fallbackBookmaker == null) {
+                    fallbackBookmaker = bookmaker;
+                }
+            }
+
+            // Use betway if available, otherwise use fallback
+            JsonNode selectedBookmaker = betwayBookmaker != null ? betwayBookmaker : fallbackBookmaker;
+            if (selectedBookmaker == null) {
+                log.debug("No bookmakers available with valid markets");
+                return null;
+            }
+
+            String bookmakerName = selectedBookmaker.path("key").asText();
+            log.debug("Using bookmaker: {}", bookmakerName);
+
+            // Extract all markets
+            JsonNode markets = selectedBookmaker.path("markets");
+            if (!markets.isArray() || markets.isEmpty()) {
+                log.debug("No markets found in bookmaker {}", bookmakerName);
+                return null;
+            }
+
+            // Build markets map for easy lookup
+            Map<String, JsonNode> marketsMap = new HashMap<>();
+            for (JsonNode market : markets) {
+                String marketKey = market.path("key").asText();
+                marketsMap.put(marketKey, market);
+            }
+
+            // Build JSON structure matching frontend BettingMarkets format
+            Map<String, Object> oddsMap = new HashMap<>();
+            boolean hasAnyOdds = false;
+
+            // 1. MATCH RESULT (h2h)
+            Map<String, Object> matchResult = extractMatchResult(marketsMap, homeTeamName, awayTeamName);
+            if (matchResult != null && !matchResult.isEmpty()) {
+                oddsMap.put("match_result", matchResult);
+                hasAnyOdds = true;
+            }
+
+            // 2. OVER/UNDER (totals)
+            Map<String, Object> overUnder = extractOverUnder(marketsMap);
+            if (overUnder != null && !overUnder.isEmpty()) {
+                oddsMap.put("over_under", overUnder);
+                hasAnyOdds = true;
+            }
+
+            // 3. BOTH TEAMS TO SCORE (btts)
+            Map<String, Object> btts = extractBtts(marketsMap);
+            if (btts != null && !btts.isEmpty()) {
+                oddsMap.put("btts", btts);
+                hasAnyOdds = true;
+            }
+
+            // 4. DOUBLE CHANCE (double_chance)
+            Map<String, Object> doubleChance = extractDoubleChance(marketsMap);
+            if (doubleChance != null && !doubleChance.isEmpty()) {
+                oddsMap.put("double_chance", doubleChance);
+                hasAnyOdds = true;
+            }
+
+            // 5. HANDICAP (spreads or alternate_spreads)
+            Map<String, Object> handicap = extractHandicap(marketsMap, homeTeamName, awayTeamName);
+            if (handicap != null && !handicap.isEmpty()) {
+                oddsMap.put("handicap", handicap);
+                hasAnyOdds = true;
+            }
+
+            // If no odds were extracted, return null
+            if (!hasAnyOdds) {
+                log.debug("No valid odds extracted from bookmaker {}", bookmakerName);
+                return null;
+            }
+
+            oddsMap.put("bookmaker", bookmakerName);
+
+            // Convert to stringified JSON
+            return objectMapper.writeValueAsString(oddsMap);
+
+        } catch (Exception e) {
+            log.warn("Error extracting odds from match data: {}", e.getMessage(), e);
+            return null;
+        }
+    }
+
+    /**
+     * Extract match result odds (home_win, draw, away_win) from h2h market
+     */
+    private Map<String, Object> extractMatchResult(Map<String, JsonNode> marketsMap, String homeTeamName, String awayTeamName) {
+        JsonNode h2hMarket = marketsMap.get("h2h");
+        if (h2hMarket == null) {
+            return null;
+        }
+
+        JsonNode outcomes = h2hMarket.path("outcomes");
+        if (!outcomes.isArray() || outcomes.size() < 3) {
+            return null;
+        }
+
+        Double homeWin = null;
+        Double draw = null;
+        Double awayWin = null;
+
+        for (JsonNode outcome : outcomes) {
+            String outcomeName = outcome.path("name").asText();
+            Double price = outcome.path("price").asDouble(0.0);
+
+            if (price <= 0) {
+                continue;
+            }
+
+            if (outcomeName.equalsIgnoreCase(homeTeamName)) {
+                homeWin = price;
+            } else if (outcomeName.equalsIgnoreCase(awayTeamName)) {
+                awayWin = price;
+            } else if (outcomeName.equalsIgnoreCase("Draw")) {
+                draw = price;
+            }
+        }
+
+        if (homeWin == null || draw == null || awayWin == null) {
+            return null;
+        }
+
+        Map<String, Object> matchResult = new HashMap<>();
+        matchResult.put("home_win", homeWin);
+        matchResult.put("draw", draw);
+        matchResult.put("away_win", awayWin);
+        return matchResult;
+    }
+
+    /**
+     * Extract over/under odds from totals market
+     * Maps to: over_0_5, under_0_5, over_1_5, under_1_5, over_2_5, under_2_5, over_3_5, under_3_5, over_4_5, under_4_5
+     */
+    private Map<String, Object> extractOverUnder(Map<String, JsonNode> marketsMap) {
+        JsonNode totalsMarket = marketsMap.get("totals");
+        if (totalsMarket == null) {
+            // Try alternate_totals as fallback
+            totalsMarket = marketsMap.get("alternate_totals");
+        }
+        
+        if (totalsMarket == null) {
+            return null;
+        }
+
+        JsonNode outcomes = totalsMarket.path("outcomes");
+        if (!outcomes.isArray()) {
+            return null;
+        }
+
+        Map<String, Object> overUnder = new HashMap<>();
+
+        for (JsonNode outcome : outcomes) {
+            String outcomeName = outcome.path("name").asText();
+            Double price = outcome.path("price").asDouble(0.0);
+            
+            if (price <= 0) {
+                continue;
+            }
+
+            // Get the point value from outcome (e.g., "Over 2.5", "Under 1.5")
+            JsonNode point = outcome.path("point");
+            if (!point.isNull() && point.isNumber()) {
+                double pointValue = point.asDouble();
+                
+                // Map to frontend format: over_X_5, under_X_5
+                String key = null;
+                if (outcomeName.startsWith("Over") || outcomeName.startsWith("over")) {
+                    key = "over_" + String.format("%.1f", pointValue).replace(".", "_");
+                } else if (outcomeName.startsWith("Under") || outcomeName.startsWith("under")) {
+                    key = "under_" + String.format("%.1f", pointValue).replace(".", "_");
+                }
+                
+                if (key != null && (key.equals("over_0_5") || key.equals("under_0_5") ||
+                    key.equals("over_1_5") || key.equals("under_1_5") ||
+                    key.equals("over_2_5") || key.equals("under_2_5") ||
+                    key.equals("over_3_5") || key.equals("under_3_5") ||
+                    key.equals("over_4_5") || key.equals("under_4_5"))) {
+                    overUnder.put(key, price);
+                }
+            }
+        }
+
+        return overUnder.isEmpty() ? null : overUnder;
+    }
+
+    /**
+     * Extract both teams to score odds (btts) from btts market
+     */
+    private Map<String, Object> extractBtts(Map<String, JsonNode> marketsMap) {
+        JsonNode bttsMarket = marketsMap.get("btts");
+        if (bttsMarket == null) {
+            return null;
+        }
+
+        JsonNode outcomes = bttsMarket.path("outcomes");
+        if (!outcomes.isArray()) {
+            return null;
+        }
+
+        Double yes = null;
+        Double no = null;
+
+        for (JsonNode outcome : outcomes) {
+            String outcomeName = outcome.path("name").asText();
+            Double price = outcome.path("price").asDouble(0.0);
+
+            if (price <= 0) {
+                continue;
+            }
+
+            if (outcomeName.equalsIgnoreCase("Yes") || outcomeName.equalsIgnoreCase("Both Teams to Score")) {
+                yes = price;
+            } else if (outcomeName.equalsIgnoreCase("No") || outcomeName.equalsIgnoreCase("Not Both Teams to Score")) {
+                no = price;
+            }
+        }
+
+        if (yes == null || no == null) {
+            return null;
+        }
+
+        Map<String, Object> btts = new HashMap<>();
+        btts.put("yes", yes);
+        btts.put("no", no);
+        return btts;
+    }
+
+    /**
+     * Extract double chance odds from double_chance market
+     * Maps to: home_draw, home_away, away_draw
+     */
+    private Map<String, Object> extractDoubleChance(Map<String, JsonNode> marketsMap) {
+        JsonNode doubleChanceMarket = marketsMap.get("double_chance");
+        if (doubleChanceMarket == null) {
+            return null;
+        }
+
+        JsonNode outcomes = doubleChanceMarket.path("outcomes");
+        if (!outcomes.isArray()) {
+            return null;
+        }
+
+        Double homeDraw = null;
+        Double homeAway = null;
+        Double awayDraw = null;
+
+        for (JsonNode outcome : outcomes) {
+            String outcomeName = outcome.path("name").asText();
+            Double price = outcome.path("price").asDouble(0.0);
+
+            if (price <= 0) {
+                continue;
+            }
+
+            // Map API outcomes to frontend format
+            // API might use: "1X", "12", "X2" or "Home or Draw", "Home or Away", "Away or Draw"
+            String normalized = outcomeName.toUpperCase().replace(" ", "");
+            
+            if (normalized.equals("1X") || normalized.contains("HOMEORDRAW")) {
+                homeDraw = price;
+            } else if (normalized.equals("12") || normalized.contains("HOMEORAWAY")) {
+                homeAway = price;
+            } else if (normalized.equals("X2") || normalized.contains("AWAYORDRAW")) {
+                awayDraw = price;
+            }
+        }
+
+        Map<String, Object> doubleChance = new HashMap<>();
+        if (homeDraw != null) doubleChance.put("home_draw", homeDraw);
+        if (homeAway != null) doubleChance.put("home_away", homeAway);
+        if (awayDraw != null) doubleChance.put("away_draw", awayDraw);
+
+        return doubleChance.isEmpty() ? null : doubleChance;
+    }
+
+    /**
+     * Extract handicap odds from spreads or alternate_spreads market
+     */
+    private Map<String, Object> extractHandicap(Map<String, JsonNode> marketsMap, String homeTeamName, String awayTeamName) {
+        JsonNode spreadsMarket = marketsMap.get("spreads");
+        if (spreadsMarket == null) {
+            // Try alternate_spreads as fallback
+            spreadsMarket = marketsMap.get("alternate_spreads");
+        }
+        
+        if (spreadsMarket == null) {
+            return null;
+        }
+
+        JsonNode outcomes = spreadsMarket.path("outcomes");
+        if (!outcomes.isArray()) {
+            return null;
+        }
+
+        Map<String, Object> handicap = new HashMap<>();
+
+        for (JsonNode outcome : outcomes) {
+            String outcomeName = outcome.path("name").asText();
+            Double price = outcome.path("price").asDouble(0.0);
+            JsonNode point = outcome.path("point");
+            
+            if (price <= 0 || point.isNull() || !point.isNumber()) {
+                continue;
+            }
+
+            // Create key from handicap line (e.g., "home_+1.5", "away_-0.5")
+            double pointValue = point.asDouble();
+            String key;
+            
+            // Determine if it's home or away based on outcome name
+            // Check if outcome name matches home team, away team, or contains "Home"/"Away"
+            String normalizedName = outcomeName.toUpperCase();
+            String normalizedHomeTeam = homeTeamName != null ? homeTeamName.toUpperCase() : "";
+            String normalizedAwayTeam = awayTeamName != null ? awayTeamName.toUpperCase() : "";
+            
+            if (normalizedName.contains("HOME") || normalizedName.equals(normalizedHomeTeam) || normalizedName.startsWith("1")) {
+                key = "home_" + (pointValue >= 0 ? "+" : "") + String.format("%.1f", pointValue);
+            } else if (normalizedName.contains("AWAY") || normalizedName.equals(normalizedAwayTeam) || normalizedName.startsWith("2")) {
+                key = "away_" + (pointValue >= 0 ? "+" : "") + String.format("%.1f", pointValue);
+            } else {
+                // Fallback: use point value sign (positive = home favored, negative = away favored)
+                key = (pointValue >= 0 ? "home_" : "away_") + (pointValue >= 0 ? "+" : "") + String.format("%.1f", Math.abs(pointValue));
+            }
+            
+            handicap.put(key, price);
+        }
+
+        return handicap.isEmpty() ? null : handicap;
     }
 }

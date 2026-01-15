@@ -47,6 +47,9 @@ public class League {
     @Column(name = "country", length = 100)
     private String country;
 
+    @Column(name = "logo_url", columnDefinition = "TEXT")
+    private String logoUrl;
+
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;
 
