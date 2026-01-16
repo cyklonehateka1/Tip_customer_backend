@@ -63,6 +63,7 @@ public class SecurityConfig {
                     auth.requestMatchers("/sports/sync/**").authenticated(); // Require auth for syncing
                     auth.requestMatchers("/leagues/**").permitAll(); // Allow reading leagues without auth
                     auth.requestMatchers("/matches/**").permitAll(); // Allow reading matches without auth (role-based response)
+                    auth.requestMatchers("/tips/**").permitAll(); // Allow reading tips without auth
 
                     if (isDevelopment) {
                         auth.requestMatchers(
