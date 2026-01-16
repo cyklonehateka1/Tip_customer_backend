@@ -44,9 +44,9 @@ public  class AuthServiceImpl implements AuthService {
         user.setLastLoginAt(OffsetDateTime.now());
         userRepository.save(user);
 
-        // Get user's primary role (first role, typically CUSTOMER or TIPSTER)
-        List<UserRole> userRoles = userRoleRepository.findByUserId(user.getId());
-        String primaryRole = userRoles.isEmpty() ? "CUSTOMER" : userRoles.get(0).getRole().name();
+        // Get user's primary role from users table (role column)
+        // Default to USER if role is null (shouldn't happen due to default constraint)
+        String primaryRole = (user.getRole() != null) ? user.getRole().name() : "USER";
 
         String token = jwtTokenService.generateToken(
                 user.getId(),
@@ -76,9 +76,9 @@ public  class AuthServiceImpl implements AuthService {
             throw new ValidateException("Invalid principal type", List.of("User details not found"));
         }
 
-        // Get user's primary role
-        List<UserRole> userRoles = userRoleRepository.findByUserId(user.getId());
-        String primaryRole = userRoles.isEmpty() ? "CUSTOMER" : userRoles.get(0).getRole().name();
+        // Get user's primary role from users table (role column)
+        // Default to USER if role is null (shouldn't happen due to default constraint)
+        String primaryRole = (user.getRole() != null) ? user.getRole().name() : "USER";
 
         AuthResponse response = new AuthResponse();
         response.setToken(null);

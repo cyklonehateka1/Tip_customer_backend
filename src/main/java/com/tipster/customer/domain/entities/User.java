@@ -1,11 +1,14 @@
 package com.tipster.customer.domain.entities;
 
+import com.tipster.customer.domain.enums.UserRoleType;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.hibernate.annotations.GenericGenerator;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.OffsetDateTime;
 import java.util.UUID;
@@ -48,6 +51,10 @@ public class User {
 
     @Column(name = "avatar_url", columnDefinition = "TEXT")
     private String avatarUrl;
+
+    @JdbcTypeCode(SqlTypes.NAMED_ENUM)
+    @Column(name = "role", nullable = false, columnDefinition = "user_role_type")
+    private UserRoleType role = UserRoleType.USER;
 
     @Column(name = "is_active", nullable = false)
     private Boolean isActive = true;

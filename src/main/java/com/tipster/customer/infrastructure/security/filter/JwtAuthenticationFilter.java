@@ -46,14 +46,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     User user = userOptional.get();
                     if (user.getIsActive()) {
                         // Get user roles and convert to authorities
-                        List<UserRole> userRoles = userRoleRepository.findByUserId(user.getId());
-                        List<SimpleGrantedAuthority> authorities = userRoles.stream()
-                                .map(role -> new SimpleGrantedAuthority("ROLE_" + role.getRole().name()))
-                                .collect(Collectors.toList());
+                        // First check role from users table
+                        List<SimpleGrantedAuthority> authorities = new java.util.ArrayList<>();
                         
-                        // If no roles, default to CUSTOMER
+                        if (user.getRole() != null) {
+                            authorities.add(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()));
+                        } else {
+                            // Fall back to user_roles table
+                            List<UserRole> userRoles = userRoleRepository.findByUserId(user.getId());
+                            authorities = userRoles.stream()
+                                    .map(role -> new SimpleGrantedAuthority("ROLE_" + role.getRole().name()))
+                                    .collect(Collectors.toList());
+                        }
+                        
+                        // If no roles, default to USER
                         if (authorities.isEmpty()) {
-                            authorities.add(new SimpleGrantedAuthority("ROLE_CUSTOMER"));
+                            authorities.add(new SimpleGrantedAuthority("ROLE_USER"));
                         }
 
                         UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
